@@ -16,31 +16,121 @@
     button{ padding: 8px 12px; cursor:pointer; }
     .meta{ font-size: 12px; color:#444; }
     #sheet{ margin-top: 16px; }
-    .sheet-head{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
-    .grid{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px 18px; margin-top: 14px; }
-    .q{ border-bottom: 1px dotted #bbb; padding-bottom: 6px; white-space: nowrap; font-size: 18px; line-height: 1.6; }
+    .sheet-head{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+    }
+    .title{ font-size: 22px; font-weight: 800; }
+
+    /* ===== 氏名・日付（画面でも大きめ） ===== */
+    .namebox{
+      border: 2px solid #000;
+      border-radius: 10px;
+      padding: 12px 14px;
+      min-width: 320px;
+    }
+    .name-row{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-bottom: 10px;
+    }
+    .name-label{
+      font-size: 18px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .line{
+      flex:1;
+      border-bottom: 2px solid #000;
+      height: 0;
+      transform: translateY(2px);
+    }
+
+    /* ===== 問題レイアウト ===== */
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px 22px;
+      margin-top: 18px;
+    }
+    .q{
+      display:flex;
+      align-items:flex-end;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #000;
+      font-size: 20px;
+      line-height: 1.8;
+      white-space: nowrap;
+    }
+
+    /* 番号：式と混同しないように「枠付き・小さめ・色味」 */
+    .qn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width: 40px;
+      height: 34px;
+      padding: 0 10px;
+      border: 2px solid #000;
+      border-radius: 999px;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1;
+      background: #fff;
+      flex: 0 0 auto;
+    }
+    .qe{
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
     .hidden{ display:none; }
 
-    /* ===== 印刷用（高齢者向け：大きい文字・広い行間） ===== */
+    /* ===== 印刷用（高齢者向け：さらに大きい文字・広い行間） ===== */
     @media print{
       body{ margin:0; }
       .no-print{ display:none !important; }
-      #sheet{ padding: 20mm 18mm; }
-      .q{
-        font-size: 22px;
-        line-height: 1.9;
-        padding-bottom: 10px;
-        border-bottom: 2px solid #000;
+      #sheet{ padding: 20mm 18mm; border:none; margin:0; }
+      .title{ font-size: 24px; }
+      .namebox{
+        min-width: 0;
+        width: 100%;
+        padding: 14px 16px;
+        border-width: 3px;
       }
-      .meta{ font-size: 14px; }
-      .title{ font-size: 22px; font-weight: 700; }
+      .name-label{ font-size: 20px; }
+      .line{ border-bottom-width: 3px; }
+
+      .grid{ gap: 18px 26px; }
+      .q{
+        font-size: 24px;
+        line-height: 2.0;
+        padding-bottom: 12px;
+        border-bottom-width: 3px;
+      }
+      .qn{
+        min-width: 44px;
+        height: 38px;
+        border-width: 3px;
+        font-size: 16px; /* 番号は式より小さく固定 */
+      }
+      .qe{
+        font-size: 26px;
+        font-weight: 800;
+      }
+
       .answers-grid{
         display:grid;
         grid-template-columns: repeat(4, 1fr);
-        gap: 10px 18px;
+        gap: 14px 22px;
         margin-top: 14px;
-        font-size: 18px;
-        line-height: 1.8;
+        font-size: 20px;
+        line-height: 1.9;
       }
     }
   </style>
@@ -50,7 +140,7 @@
   <div class="card no-print">
     <div class="row">
       <strong>算数プリント生成</strong>
-      <span class="meta">過去30日重複なし（端末内）／解答別紙印刷</span>
+      <span class="meta">過去30日重複なし（端末内）／解答別紙印刷／印刷時は条件非表示</span>
     </div>
     <hr />
     <div class="row">
@@ -86,10 +176,8 @@
       <button id="btnClearHistory" title="この端末の過去履歴を消去します">履歴クリア</button>
     </div>
 
-    <div class="meta" style="margin-top:8px;">
-      ※ 同一端末（同一ブラウザ）内で「過去30日」の出題を記録し、重複を避けます。<br />
-      ※ seedは内部で自動生成します（画面に表示しません）。
-    </div>
+    <!-- 画面上のみ条件表示（印刷には出さない） -->
+    <div class="meta" id="metaLineScreen" style="margin-top:8px;"></div>
   </div>
 
   <!-- 問題用紙 -->
@@ -97,20 +185,26 @@
     <div class="sheet-head">
       <div>
         <div class="title">算数プリント</div>
-        <div class="meta" id="metaLine"></div>
       </div>
-      <div class="meta" style="text-align:right;">
-        氏名：＿＿＿＿＿＿＿＿＿＿＿<br />
-        日付：＿＿＿＿＿／＿＿＿＿＿
+
+      <!-- 氏名・日付：大きく -->
+      <div class="namebox">
+        <div class="name-row">
+          <div class="name-label">氏名</div>
+          <div class="line"></div>
+        </div>
+        <div class="name-row" style="margin-bottom:0;">
+          <div class="name-label">日付</div>
+          <div class="line"></div>
+        </div>
       </div>
     </div>
 
     <div id="grid" class="grid"></div>
 
     <!-- 解答用紙（印刷時のみ表示させる運用） -->
-    <div id="answerSheet" class="hidden" style="margin-top:20px;">
+    <div id="answerSheet" class="hidden" style="margin-top:22px;">
       <div class="title">解答</div>
-      <div class="meta" id="answerMeta"></div>
       <div id="answersGrid" class="answers-grid"></div>
     </div>
   </div>
@@ -208,8 +302,7 @@ function genOne(rng, op, maxNum, noCarry, noBorrow, divExact) {
       b = randInt(rng, 0, maxNum);
       if (noCarry && hasCarry(a, b)) continue;
       ans = a + b;
-      // 足し算は順序を正規化（重複回避）
-      const x = Math.min(a, b), y = Math.max(a, b);
+      const x = Math.min(a, b), y = Math.max(a, b); // 足し算は正規化
       key = `+:${x},${y}`;
       disp = `${a} + ${b} =`;
       return { key, disp, ans };
@@ -225,7 +318,6 @@ function genOne(rng, op, maxNum, noCarry, noBorrow, divExact) {
       return { key, disp, ans };
 
     } else if (op === '*') {
-      // 掛け算：上限を自然に保つ
       const lim = Math.max(5, Math.floor(Math.sqrt(maxNum)));
       a = randInt(rng, 0, lim);
       b = randInt(rng, 0, lim);
@@ -237,7 +329,6 @@ function genOne(rng, op, maxNum, noCarry, noBorrow, divExact) {
 
     } else if (op === '/') {
       if (divExact) {
-        // 割り切れる：商qと割る数dから作る
         const d = randInt(rng, 1, Math.max(2, Math.min(12, maxNum)));
         const q = randInt(rng, 0, Math.max(2, Math.min(12, maxNum)));
         a = d * q; b = d;
@@ -247,13 +338,12 @@ function genOne(rng, op, maxNum, noCarry, noBorrow, divExact) {
         disp = `${a} ÷ ${b} =`;
         return { key, disp, ans };
       } else {
-        // 余りあり（表示は商・余り）
         b = randInt(rng, 1, Math.max(2, Math.min(12, maxNum)));
         a = randInt(rng, 0, maxNum);
         const q = Math.floor(a / b);
         const r = a % b;
         ans = `${q} あまり ${r}`;
-        key = `/%:${a},${b}`; // 余りありモード識別
+        key = `/%:${a},${b}`;
         disp = `${a} ÷ ${b} =（商　　余り　　）`;
         return { key, disp, ans };
       }
@@ -262,15 +352,14 @@ function genOne(rng, op, maxNum, noCarry, noBorrow, divExact) {
   return null;
 }
 
-/* ========= 画面反映 ========= */
+/* ========= 表示 ========= */
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c)=>({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
 }
 
-let lastAnswers = []; // 解答別紙用
-let lastMetaText = '';
+let lastAnswers = [];
 
 function genSheet() {
   const ops = getOps();
@@ -283,19 +372,19 @@ function genSheet() {
   const noBorrow = document.getElementById('noBorrow').checked;
   const divExact = document.getElementById('divExact').checked;
 
-  // seedは内部自動（表示しない）
+  // seedは内部自動
   const seedStr = autoSeed();
   const rng = mulberry32(xfnv1a(seedStr));
 
-  // 履歴（過去30日）を読み込み＆整理
+  // 履歴（過去30日）
   let hist = pruneHistory(loadHistory());
-  const histSet = new Set(hist.map(x => x.h)); // hash集合
+  const histSet = new Set(hist.map(x => x.h));
 
-  const usedInThisSheet = new Set(); // 同一プリント内重複
+  const usedInThisSheet = new Set();
   const qs = [];
   const answers = [];
 
-  const MAX_TRY_TOTAL = 60000;
+  const MAX_TRY_TOTAL = 70000;
   let tries = 0;
 
   while (qs.length < count && tries < MAX_TRY_TOTAL) {
@@ -305,8 +394,6 @@ function genSheet() {
     if (!q) continue;
 
     const h = hashStr(q.key);
-
-    // 過去30日 & 同一プリント内の重複回避
     if (histSet.has(h)) continue;
     if (usedInThisSheet.has(h)) continue;
 
@@ -319,24 +406,28 @@ function genSheet() {
     alert('条件が厳しすぎて十分な問題数を生成できませんでした。\n上限や制約（繰り上がり/繰り下がり等）を緩めてください。');
   }
 
-  // 表示（問題）
+  // 問題表示（番号を枠に入れて混同回避）
   const grid = document.getElementById('grid');
   grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  grid.innerHTML = qs.map((s, i) => `<div class="q">${i+1}. ${escapeHtml(s)}</div>`).join('');
+  grid.innerHTML = qs.map((s, i) => `
+    <div class="q">
+      <span class="qn">No.${i+1}</span>
+      <span class="qe">${escapeHtml(s)}</span>
+    </div>
+  `).join('');
 
-  // メタ
-  const opLabel = ops.map(o=>o==='*'?'×':o==='/'?'÷':o).join('・');
-  lastMetaText = `条件：演算=${opLabel} / 上限=${maxNum} / 問題数=${count}`;
-  document.getElementById('metaLine').textContent = lastMetaText;
-
-  // 解答（別紙用）
+  // 解答（別紙）
   lastAnswers = answers.slice();
-  document.getElementById('answerMeta').textContent = lastMetaText;
   const answersGrid = document.getElementById('answersGrid');
   answersGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  answersGrid.innerHTML = answers.map((a,i)=>`<div>${i+1}. ${escapeHtml(a)}</div>`).join('');
+  answersGrid.innerHTML = answers.map((a,i)=>`<div><strong>No.${i+1}</strong>　${escapeHtml(a)}</div>`).join('');
 
-  // 履歴に保存（採用分）
+  // 画面上だけ条件表示（印刷には出ない）
+  const opLabel = ops.map(o=>o==='*'?'×':o==='/'?'÷':o).join('・');
+  document.getElementById('metaLineScreen').textContent =
+    `条件（画面のみ）：演算=${opLabel} / 上限=${maxNum} / 問題数=${count} / 列=${cols}`;
+
+  // 履歴保存
   const now = Date.now();
   const add = Array.from(usedInThisSheet).map(h => ({ h, time: now }));
   hist = pruneHistory(hist.concat(add));
@@ -354,11 +445,9 @@ document.getElementById('btnPrintQ').addEventListener('click', () => {
   window.print();
 });
 document.getElementById('btnPrintA').addEventListener('click', () => {
-  // 生成していない状態で押された場合に備える
   if (!lastAnswers.length) genSheet();
   showAnswerSheet(true);
   window.print();
-  // 印刷後は問題表示に戻す（画面上）
   showAnswerSheet(false);
 });
 
@@ -370,9 +459,7 @@ document.getElementById('btnClearHistory').addEventListener('click', () => {
 });
 
 /* ========= 生成ボタン ========= */
-document.getElementById('btnGen').addEventListener('click', () => {
-  genSheet();
-});
+document.getElementById('btnGen').addEventListener('click', genSheet);
 
 // 初期表示
 genSheet();
