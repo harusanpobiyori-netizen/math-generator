@@ -5,88 +5,376 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>算数プリント自動生成</title>
   <style>
-    body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;margin:16px}
-    .card{border:1px solid #ddd;border-radius:10px;padding:12px;margin-bottom:12px}
-    .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-    input[type="number"],input[type="text"]{padding:6px;width:120px}
-    button{padding:8px 12px;cursor:pointer}
-    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 18px;margin-top:14px}
-    .q{border-bottom:1px dotted #bbb;padding-bottom:4px;white-space:nowrap}
+    body{
+      font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+      margin: 16px;
+    }
+    .row{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    .card{ border:1px solid #ddd; border-radius:10px; padding:12px; margin-bottom:12px; }
+    label{ margin-right: 8px; }
+    input[type="number"]{ width: 110px; padding: 6px; }
+    button{ padding: 8px 12px; cursor:pointer; }
+    .meta{ font-size: 12px; color:#444; }
+    #sheet{ margin-top: 16px; }
+    .sheet-head{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+    .grid{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px 18px; margin-top: 14px; }
+    .q{ border-bottom: 1px dotted #bbb; padding-bottom: 6px; white-space: nowrap; font-size: 18px; line-height: 1.6; }
+    .hidden{ display:none; }
+
+    /* ===== 印刷用（高齢者向け：大きい文字・広い行間） ===== */
     @media print{
-      .no-print{display:none!important}
-      body{margin:0}
-      #sheet{padding:18mm 15mm}
-      .q{border-bottom:1px solid #000}
+      body{ margin:0; }
+      .no-print{ display:none !important; }
+      #sheet{ padding: 20mm 18mm; }
+      .q{
+        font-size: 22px;
+        line-height: 1.9;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #000;
+      }
+      .meta{ font-size: 14px; }
+      .title{ font-size: 22px; font-weight: 700; }
+      .answers-grid{
+        display:grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px 18px;
+        margin-top: 14px;
+        font-size: 18px;
+        line-height: 1.8;
+      }
     }
   </style>
 </head>
 <body>
+  <!-- 操作パネル（seedは見せない） -->
   <div class="card no-print">
-    <div class="row"><strong>算数プリント生成</strong></div>
     <div class="row">
+      <strong>算数プリント生成</strong>
+      <span class="meta">過去30日重複なし（端末内）／解答別紙印刷</span>
+    </div>
+    <hr />
+    <div class="row">
+      <span>演算：</span>
       <label><input type="checkbox" id="opAdd" checked>＋</label>
       <label><input type="checkbox" id="opSub" checked>－</label>
       <label><input type="checkbox" id="opMul">×</label>
       <label><input type="checkbox" id="opDiv">÷</label>
     </div>
-    <div class="row">
-      <label>数字上限 <input type="number" id="maxNum" value="100" min="5"></label>
-      <label>問題数 <input type="number" id="count" value="20" min="5" max="200"></label>
-      <label>seed <input type="text" id="seed" placeholder="空なら自動"></label>
+
+    <div class="row" style="margin-top:8px;">
+      <label>数字上限：
+        <input type="number" id="maxNum" value="100" min="5" max="99999" />
+      </label>
+      <label>問題数：
+        <input type="number" id="count" value="20" min="5" max="200" />
+      </label>
+      <label>列数：
+        <input type="number" id="cols" value="4" min="1" max="6" />
+      </label>
+    </div>
+
+    <div class="row" style="margin-top:8px;">
+      <label><input type="checkbox" id="noCarry">（＋）繰り上がりなし</label>
+      <label><input type="checkbox" id="noBorrow">（－）繰り下がりなし</label>
+      <label><input type="checkbox" id="divExact" checked>（÷）割り切れるのみ</label>
+    </div>
+
+    <div class="row" style="margin-top:10px;">
       <button id="btnGen">生成</button>
-      <button id="btnPrint">印刷/保存(PDF)</button>
+      <button id="btnPrintQ">問題を印刷/保存(PDF)</button>
+      <button id="btnPrintA">解答を印刷/保存(PDF)</button>
+      <button id="btnClearHistory" title="この端末の過去履歴を消去します">履歴クリア</button>
+    </div>
+
+    <div class="meta" style="margin-top:8px;">
+      ※ 同一端末（同一ブラウザ）内で「過去30日」の出題を記録し、重複を避けます。<br />
+      ※ seedは内部で自動生成します（画面に表示しません）。
     </div>
   </div>
 
+  <!-- 問題用紙 -->
   <div id="sheet" class="card">
-    <div class="row" style="justify-content:space-between">
-      <div><strong>算数プリント</strong> <span id="meta" style="font-size:12px;color:#444"></span></div>
-      <div style="font-size:12px;color:#444;text-align:right">
-        氏名：＿＿＿＿＿＿＿＿＿＿＿<br>日付：＿＿＿＿／＿＿＿＿
+    <div class="sheet-head">
+      <div>
+        <div class="title">算数プリント</div>
+        <div class="meta" id="metaLine"></div>
+      </div>
+      <div class="meta" style="text-align:right;">
+        氏名：＿＿＿＿＿＿＿＿＿＿＿<br />
+        日付：＿＿＿＿＿／＿＿＿＿＿
       </div>
     </div>
+
     <div id="grid" class="grid"></div>
+
+    <!-- 解答用紙（印刷時のみ表示させる運用） -->
+    <div id="answerSheet" class="hidden" style="margin-top:20px;">
+      <div class="title">解答</div>
+      <div class="meta" id="answerMeta"></div>
+      <div id="answersGrid" class="answers-grid"></div>
+    </div>
   </div>
 
 <script>
-function xfnv1a(str){let h=2166136261>>>0;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
-function mulberry32(a){return function(){let t=a+=0x6D2B79F5;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296}}
-function randInt(r,min,max){return Math.floor(r()*(max-min+1))+min}
-function pick(r,arr){return arr[Math.floor(r()*arr.length)]}
-function getOps(){const ops=[];if(opAdd.checked)ops.push('+');if(opSub.checked)ops.push('-');if(opMul.checked)ops.push('*');if(opDiv.checked)ops.push('/');return ops}
-function genOne(r,op,maxNum){
-  if(op==='+'){const a=randInt(r,0,maxNum),b=randInt(r,0,maxNum);return {k:`+:${a},${b}`,d:`${a} + ${b} =`}}
-  if(op==='-'){let a=randInt(r,0,maxNum),b=randInt(r,0,maxNum);if(b>a)[a,b]=[b,a];return {k:`-:${a},${b}`,d:`${a} - ${b} =`}}
-  if(op==='*'){const lim=Math.max(5,Math.floor(Math.sqrt(maxNum)));let a=randInt(r,0,lim),b=randInt(r,0,lim);return {k:`*:${a},${b}`,d:`${a} × ${b} =`}}
-  if(op==='/'){const d=randInt(r,1,12),q=randInt(r,0,12);const a=d*q,b=d; if(a>maxNum) return null; return {k:`/:${a},${b}`,d:`${a} ÷ ${b} =`}}
-}
-function genSheet(){
-  const ops=getOps(); if(!ops.length){alert('演算を選択してください');return;}
-  const maxNum=Number(maxNumEl.value), count=Number(countEl.value);
-  let s=seedEl.value.trim(); if(!s){s=String(Date.now()); seedEl.value=s;}
-  const r=mulberry32(xfnv1a(s));
-  const used=new Set(); const qs=[];
-  while(qs.length<count){
-    const op=pick(r,ops);
-    const q=genOne(r,op,maxNum); if(!q) continue;
-    if(used.has(q.k)) continue;
-    used.add(q.k); qs.push(q.d);
-    if(used.size>5000) break;
+/* ========= seed付き乱数（内部のみ：UIに出さない） ========= */
+function xfnv1a(str) {
+  let h = 2166136261 >>> 0;
+  for (let i=0; i<str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
   }
-  meta.textContent=`（上限=${maxNum} / 問題数=${count} / seed=${s}）`;
-  grid.innerHTML=qs.map((t,i)=>`<div class="q">${i+1}. ${t}</div>`).join('');
+  return h >>> 0;
 }
-const opAdd=document.getElementById('opAdd');
-const opSub=document.getElementById('opSub');
-const opMul=document.getElementById('opMul');
-const opDiv=document.getElementById('opDiv');
-const maxNumEl=document.getElementById('maxNum');
-const countEl=document.getElementById('count');
-const seedEl=document.getElementById('seed');
-const grid=document.getElementById('grid');
-const meta=document.getElementById('meta');
-document.getElementById('btnGen').addEventListener('click',genSheet);
-document.getElementById('btnPrint').addEventListener('click',()=>window.print());
+function mulberry32(a) {
+  return function() {
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+}
+function autoSeed() {
+  return String(Date.now()) + '-' + Math.floor(Math.random() * 1e9);
+}
+function randInt(rng, min, max) { // inclusive
+  return Math.floor(rng() * (max - min + 1)) + min;
+}
+function pick(rng, arr) {
+  return arr[Math.floor(rng() * arr.length)];
+}
+
+/* ========= 過去30日重複ゼロ（端末内履歴） ========= */
+const HISTORY_KEY = 'math_gen_history_v1';
+const DAYS_30_MS = 30 * 24 * 60 * 60 * 1000;
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+  catch { return []; }
+}
+function saveHistory(list) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+}
+function pruneHistory(list) {
+  const now = Date.now();
+  return list.filter(x => (now - x.time) <= DAYS_30_MS);
+}
+function hashStr(s){
+  let h = 2166136261>>>0;
+  for(let i=0;i<s.length;i++){
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h,16777619);
+  }
+  return h>>>0;
+}
+
+/* ========= 条件系ユーティリティ ========= */
+function getOps() {
+  const ops = [];
+  if (document.getElementById('opAdd').checked) ops.push('+');
+  if (document.getElementById('opSub').checked) ops.push('-');
+  if (document.getElementById('opMul').checked) ops.push('*');
+  if (document.getElementById('opDiv').checked) ops.push('/');
+  return ops;
+}
+function hasCarry(a, b) {
+  while (a > 0 || b > 0) {
+    if ((a % 10) + (b % 10) >= 10) return true;
+    a = Math.floor(a / 10);
+    b = Math.floor(b / 10);
+  }
+  return false;
+}
+function hasBorrow(a, b) {
+  let borrow = 0;
+  while (a > 0 || b > 0) {
+    const ad = (a % 10) - borrow;
+    const bd = (b % 10);
+    if (ad < bd) return true;
+    borrow = 0;
+    a = Math.floor(a / 10);
+    b = Math.floor(b / 10);
+  }
+  return false;
+}
+
+/* ========= 問題生成（条件を満たすまでリトライ） ========= */
+function genOne(rng, op, maxNum, noCarry, noBorrow, divExact) {
+  const MAX_TRY = 2500;
+  for (let t=0; t<MAX_TRY; t++) {
+    let a, b, ans, disp, key;
+
+    if (op === '+') {
+      a = randInt(rng, 0, maxNum);
+      b = randInt(rng, 0, maxNum);
+      if (noCarry && hasCarry(a, b)) continue;
+      ans = a + b;
+      // 足し算は順序を正規化（重複回避）
+      const x = Math.min(a, b), y = Math.max(a, b);
+      key = `+:${x},${y}`;
+      disp = `${a} + ${b} =`;
+      return { key, disp, ans };
+
+    } else if (op === '-') {
+      a = randInt(rng, 0, maxNum);
+      b = randInt(rng, 0, maxNum);
+      if (b > a) [a, b] = [b, a]; // マイナス回避
+      if (noBorrow && hasBorrow(a, b)) continue;
+      ans = a - b;
+      key = `-:${a},${b}`;
+      disp = `${a} - ${b} =`;
+      return { key, disp, ans };
+
+    } else if (op === '*') {
+      // 掛け算：上限を自然に保つ
+      const lim = Math.max(5, Math.floor(Math.sqrt(maxNum)));
+      a = randInt(rng, 0, lim);
+      b = randInt(rng, 0, lim);
+      ans = a * b;
+      if (ans > maxNum) continue;
+      key = `*:${a},${b}`;
+      disp = `${a} × ${b} =`;
+      return { key, disp, ans };
+
+    } else if (op === '/') {
+      if (divExact) {
+        // 割り切れる：商qと割る数dから作る
+        const d = randInt(rng, 1, Math.max(2, Math.min(12, maxNum)));
+        const q = randInt(rng, 0, Math.max(2, Math.min(12, maxNum)));
+        a = d * q; b = d;
+        if (a > maxNum) continue;
+        ans = q;
+        key = `/:${a},${b}`;
+        disp = `${a} ÷ ${b} =`;
+        return { key, disp, ans };
+      } else {
+        // 余りあり（表示は商・余り）
+        b = randInt(rng, 1, Math.max(2, Math.min(12, maxNum)));
+        a = randInt(rng, 0, maxNum);
+        const q = Math.floor(a / b);
+        const r = a % b;
+        ans = `${q} あまり ${r}`;
+        key = `/%:${a},${b}`; // 余りありモード識別
+        disp = `${a} ÷ ${b} =（商　　余り　　）`;
+        return { key, disp, ans };
+      }
+    }
+  }
+  return null;
+}
+
+/* ========= 画面反映 ========= */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c)=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+let lastAnswers = []; // 解答別紙用
+let lastMetaText = '';
+
+function genSheet() {
+  const ops = getOps();
+  if (ops.length === 0) { alert('演算を1つ以上選択してください'); return; }
+
+  const maxNum = Number(document.getElementById('maxNum').value);
+  const count  = Number(document.getElementById('count').value);
+  const cols   = Number(document.getElementById('cols').value);
+  const noCarry  = document.getElementById('noCarry').checked;
+  const noBorrow = document.getElementById('noBorrow').checked;
+  const divExact = document.getElementById('divExact').checked;
+
+  // seedは内部自動（表示しない）
+  const seedStr = autoSeed();
+  const rng = mulberry32(xfnv1a(seedStr));
+
+  // 履歴（過去30日）を読み込み＆整理
+  let hist = pruneHistory(loadHistory());
+  const histSet = new Set(hist.map(x => x.h)); // hash集合
+
+  const usedInThisSheet = new Set(); // 同一プリント内重複
+  const qs = [];
+  const answers = [];
+
+  const MAX_TRY_TOTAL = 60000;
+  let tries = 0;
+
+  while (qs.length < count && tries < MAX_TRY_TOTAL) {
+    tries++;
+    const op = pick(rng, ops);
+    const q = genOne(rng, op, maxNum, noCarry, noBorrow, divExact);
+    if (!q) continue;
+
+    const h = hashStr(q.key);
+
+    // 過去30日 & 同一プリント内の重複回避
+    if (histSet.has(h)) continue;
+    if (usedInThisSheet.has(h)) continue;
+
+    usedInThisSheet.add(h);
+    qs.push(q.disp);
+    answers.push(q.ans);
+  }
+
+  if (qs.length < count) {
+    alert('条件が厳しすぎて十分な問題数を生成できませんでした。\n上限や制約（繰り上がり/繰り下がり等）を緩めてください。');
+  }
+
+  // 表示（問題）
+  const grid = document.getElementById('grid');
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  grid.innerHTML = qs.map((s, i) => `<div class="q">${i+1}. ${escapeHtml(s)}</div>`).join('');
+
+  // メタ
+  const opLabel = ops.map(o=>o==='*'?'×':o==='/'?'÷':o).join('・');
+  lastMetaText = `条件：演算=${opLabel} / 上限=${maxNum} / 問題数=${count}`;
+  document.getElementById('metaLine').textContent = lastMetaText;
+
+  // 解答（別紙用）
+  lastAnswers = answers.slice();
+  document.getElementById('answerMeta').textContent = lastMetaText;
+  const answersGrid = document.getElementById('answersGrid');
+  answersGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  answersGrid.innerHTML = answers.map((a,i)=>`<div>${i+1}. ${escapeHtml(a)}</div>`).join('');
+
+  // 履歴に保存（採用分）
+  const now = Date.now();
+  const add = Array.from(usedInThisSheet).map(h => ({ h, time: now }));
+  hist = pruneHistory(hist.concat(add));
+  saveHistory(hist);
+}
+
+/* ========= 印刷（問題/解答 別ページ） ========= */
+function showAnswerSheet(show) {
+  const el = document.getElementById('answerSheet');
+  if (show) el.classList.remove('hidden');
+  else el.classList.add('hidden');
+}
+document.getElementById('btnPrintQ').addEventListener('click', () => {
+  showAnswerSheet(false);
+  window.print();
+});
+document.getElementById('btnPrintA').addEventListener('click', () => {
+  // 生成していない状態で押された場合に備える
+  if (!lastAnswers.length) genSheet();
+  showAnswerSheet(true);
+  window.print();
+  // 印刷後は問題表示に戻す（画面上）
+  showAnswerSheet(false);
+});
+
+/* ========= 履歴クリア ========= */
+document.getElementById('btnClearHistory').addEventListener('click', () => {
+  if (!confirm('この端末の出題履歴（過去30日分）を削除します。よろしいですか？')) return;
+  localStorage.removeItem(HISTORY_KEY);
+  alert('履歴を削除しました。');
+});
+
+/* ========= 生成ボタン ========= */
+document.getElementById('btnGen').addEventListener('click', () => {
+  genSheet();
+});
+
+// 初期表示
 genSheet();
 </script>
 </body>
